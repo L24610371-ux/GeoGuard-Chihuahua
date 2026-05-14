@@ -5,23 +5,20 @@ from streamlit_folium import st_folium
 from folium.plugins import MarkerCluster
 from math import radians, cos, sin, asin, sqrt
 from datetime import datetime
-
-# Importamos las funciones de la IA
 from ia_helper import inicializar_ia, obtener_respuesta_ia
 
-# ---------------------------------------------------------
-# 1. CONFIGURACIÓN Y LLAVE
-# ---------------------------------------------------------
+# CONFIGURACIÓN DE PÁGINA
 st.set_page_config(page_title="GeoGuard - Chihuahua", layout="wide", page_icon="🛡️")
 
-# PEGA TU API KEY AQUÍ
-MI_API_KEY = "AIzaSyB5KosUMhYmE6TMmPSBYTAAH1oXHDFqXpQ" 
+# --- CONEXIÓN CON LA API (USANDO SECRETS) ---
+try:
+    MI_API_KEY = st.secrets["GOOGLE_API_KEY"]
+except:
+    MI_API_KEY = "TU_LLAVE_LOCAL_POR_SI_FALLA"
 
-# ---------------------------------------------------------
-# 2. FUNCIONES TÉCNICAS (MATEMÁTICAS Y DATOS)
-# ---------------------------------------------------------
+# FUNCIONES MATEMÁTICAS
 def calcular_distancia(lat1, lon1, lat2, lon2):
-    R = 6371 # Radio de la Tierra en km
+    R = 6371
     lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
     dlat, dlon = lat2 - lat1, lon2 - lon1
     a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
@@ -36,135 +33,82 @@ def cargar_datos():
     except:
         return pd.DataFrame()
 
-# Estados de sesión para persistencia
+# ESTADOS DE SESIÓN
 if 'messages' not in st.session_state:
     st.session_state.messages = []
-if 'reportes_comunidad' not in st.session_state:
-    st.session_state.reportes_comunidad = []
+if 'reportes' not in st.session_state:
+    st.session_state.reportes = []
 
 df = cargar_datos()
 
-# ---------------------------------------------------------
-# 3. SIDEBAR (PANEL DE CONTROL Y ALERTAS REFINADAS)
-# ---------------------------------------------------------
+# --- SIDEBAR: ALERTAS CIUDADANAS (PUNTO 2 REFINADO) ---
 st.sidebar.title("🕹️ Panel de Control")
 
 if not df.empty:
-    municipio_sel = st.sidebar.selectbox("Filtrar por Ciudad:", ["Todos"] + sorted(df['municipio'].unique()))
-    
-    st.sidebar.divider()
-    
-    # REFINAMIENTO DE ALERTAS CIUDADANAS (PUNTO 2)
-    st.sidebar.subheader("📢 Reporte de Sospecha")
-    st.sidebar.caption("Tu reporte ayuda a mapear zonas de riesgo en tiempo real.")
-    
+    st.sidebar.subheader("📢 Reporte Comunitario")
     with st.sidebar.form("form_alerta", clear_on_submit=True):
-        tipo_sospecha = st.selectbox("Incidente:", ["Persona sospechosa", "Falta de alumbrado", "Acoso", "Vehículo sospechoso", "Otro"])
-        detalles = st.text_area("¿Qué observaste?", placeholder="Ej: Calle muy oscura cerca del parque...")
-        btn_alerta = st.form_submit_button("Publicar Alerta Comunitaria")
+        tipo = st.selectbox("Tipo de riesgo:", ["Persona sospechosa", "Acoso", "Calle sin luz", "Otro"])
+        nota = st.text_area("Detalles:")
+        enviar = st.form_submit_button("Publicar Alerta")
         
-        if btn_alerta:
-            if detalles:
-                # Ubicación ejemplo (Centro de Cuauhtémoc)
-                nueva_alerta = {
-                    "tipo": tipo_sospecha,
-                    "nota": detalles,
-                    "lat": 28.4044, "lon": -106.8664, 
-                    "hora": datetime.now().strftime("%H:%M")
-                }
-                st.session_state.reportes_comunidad.append(nueva_alerta)
-                st.sidebar.success("✅ Alerta publicada. ¡Gracias por colaborar con la seguridad de Chihuahua!")
-            else:
-                st.sidebar.error("Por favor, describe brevemente la situación.")
+        if enviar and nota:
+            st.session_state.reportes.append({
+                "tipo": tipo, "nota": nota, 
+                "lat": 28.633, "lon": -106.069, # Ubicación base
+                "hora": datetime.now().strftime("%H:%M")
+            })
+            st.sidebar.success("✅ Alerta compartida con la red GeoGuard.")
 
     st.sidebar.divider()
+    municipio = st.sidebar.selectbox("Filtrar Ciudad:", ["Todos"] + sorted(df['municipio'].unique()))
+
+# --- CUERPO PRINCIPAL: MAPA ---
+st.title("🛡️ GeoGuard: Red de Seguridad Chihuahua")
+
+m = folium.Map(location=[28.633, -106.069], zoom_start=7, tiles="cartodbpositron")
+cluster = MarkerCluster(name="Refugios").add_to(m)
+alertas_layer = folium.FeatureGroup(name="Alertas Rojas").add_to(m)
+
+# Dibujar Refugios del CSV
+df_view = df if municipio == "Todos" else df[df['municipio'] == municipio]
+for _, r in df_view.iterrows():
+    folium.Marker(
+        [r['Latitud'], r['Longitud']], 
+        popup=f"<b>{r['Nombre']}</b><br>{r['Telefono']}",
+        icon=folium.Icon(color="orange", icon="shield", prefix="fa")
+    ).add_to(cluster)
+
+# Dibujar Alertas del usuario
+for rep in st.session_state.reportes:
+    folium.Marker(
+        [rep['lat'], rep['lon']], 
+        popup=f"⚠️ {rep['tipo']}: {rep['nota']}",
+        icon=folium.Icon(color="red", icon="warning", prefix="fa")
+    ).add_to(alertas_layer)
+
+st_folium(m, width="100%", height=400)
+
+# --- SECCIÓN DE LEYES Y FICOSEC ---
+col1, col2 = st.columns(2)
+with col1:
+    with st.expander("⚖️ Marco Jurídico"):
+        st.write("Ley de Acceso a una Vida Libre de Violencia del Estado de Chihuahua.")
+with col2:
+    with st.expander("🏛️ Instituciones Aliadas"):
+        st.write("**FICOSEC:** Apoyo legal gratuito marcando al *2232.")
+
+# --- CHAT CON IA ---
+st.divider()
+st.subheader("🤖 Consulta a GeoGuard AI")
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]): st.markdown(msg["content"])
+
+if p := st.chat_input("¿En qué puedo ayudarte?"):
+    st.session_state.messages.append({"role": "user", "content": p})
+    with st.chat_message("user"): st.markdown(p)
     
-    # BUSCADOR DE PUNTO CERCANO
-    if st.sidebar.button("🚨 Punto Seguro más Cercano"):
-        u_lat, u_lon = 28.4110, -106.8620 # Ubicación usuario simulada
-        df['distancia'] = df.apply(lambda r: calcular_distancia(u_lat, u_lon, r['Latitud'], r['Longitud']), axis=1)
-        cercano = df.loc[df['distancia'].idxmin()]
-        st.sidebar.warning(f"Refugio: {cercano['Nombre']}")
-        st.sidebar.info(f"📞 Llama: {cercano['Telefono']}")
-        centro_mapa, zoom_mapa = [cercano['Latitud'], cercano['Longitud']], 16
-    else:
-        centro_mapa, zoom_mapa = [28.633, -106.069], 8
-
-    # ---------------------------------------------------------
-    # 4. CUERPO PRINCIPAL (MAPA)
-    # ---------------------------------------------------------
-    st.title("🛡️ GeoGuard: Red de Seguridad Comunitaria")
-    
-    df_mapa = df[df['municipio'] == municipio_sel] if municipio_sel != "Todos" else df
-    
-    m = folium.Map(location=centro_mapa, zoom_start=zoom_mapa, tiles="cartodbpositron")
-    cluster_refugios = MarkerCluster(name="Puntos Naranja").add_to(m)
-    capa_alertas = folium.FeatureGroup(name="Alertas Rojas").add_to(m)
-
-    # Marcadores Puntos Naranja
-    for _, row in df_mapa.iterrows():
-        popup_html = f"<b>{row['Nombre']}</b><br>{row['Direccion']}<br><a href='tel:{row['Telefono']}'>📞 Llamar</a>"
-        folium.Marker(
-            [row['Latitud'], row['Longitud']], 
-            popup=popup_html, 
-            icon=folium.Icon(color="orange", icon="shield", prefix="fa")
-        ).add_to(cluster_refugios)
-
-    # Marcadores de Alertas Ciudadanas
-    for rep in st.session_state.reportes_comunidad:
-        folium.Marker(
-            [rep['lat'], rep['lon']],
-            popup=f"⚠️ {rep['tipo']}: {rep['nota']} ({rep['hora']})",
-            icon=folium.Icon(color="red", icon="warning", prefix="fa")
-        ).add_to(capa_alertas)
-
-    folium.LayerControl().add_to(m)
-    st_folium(m, width="100%", height=450)
-
-    # ---------------------------------------------------------
-    # 5. LEYES, DERECHOS Y FICOSEC
-    # ---------------------------------------------------------
-    st.divider()
-    st.markdown("### ⚖️ Marco Jurídico y Derechos")
-    col_ley, col_der = st.columns(2)
-
-    with col_ley:
-        with st.expander("📜 Ley de Acceso a una Vida Libre de Violencia"):
-            st.write("Establece que los establecimientos aliados deben garantizar resguardo inmediato a cualquier mujer en riesgo.")
-    with col_der:
-        with st.expander("🛡️ Tus Derechos en GeoGuard"):
-            st.write("- Derecho a ser resguardada sin ser juzgada.")
-            st.write("- Acceso a llamada de emergencia gratuita.")
-
-    st.divider()
-    st.markdown("### 🏛️ Instituciones Aliadas")
-    c_f1, c_f2 = st.columns([1, 4])
-    with c_f1:
-        st.title("🏢")
-    with c_f2:
-        st.markdown("**FICOSEC (Chihuahua)**")
-        st.write("Observatorio ciudadano que ofrece apoyo legal y psicológico gratuito (*2232).")
-        st.link_button("Ir al sitio de FICOSEC", "https://ficosec.org/")
-
-    # ---------------------------------------------------------
-    # 6. CHAT CON IA (GEMINI)
-    # ---------------------------------------------------------
-    st.divider()
-    st.subheader("🤖 GeoGuard AI: Asistente Virtual")
-    
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-
-    if p := st.chat_input("Pregunta sobre refugios o leyes..."):
-        st.session_state.messages.append({"role": "user", "content": p})
-        with st.chat_message("user"):
-            st.markdown(p)
-        with st.chat_message("assistant"):
-            model, instruct = inicializar_ia('puntos_chihuahua.csv', MI_API_KEY)
-            r = obtener_respuesta_ia(p, model, instruct)
-            st.markdown(r)
-            st.session_state.messages.append({"role": "assistant", "content": r})
-
-else:
-    st.error("Archivo 'puntos_chihuahua.csv' no encontrado.")
+    with st.chat_message("assistant"):
+        model, instruct = inicializar_ia('puntos_chihuahua.csv', MI_API_KEY)
+        r = obtener_respuesta_ia(p, model, instruct)
+        st.markdown(r)
+        st.session_state.messages.append({"role": "assistant", "content": r})
