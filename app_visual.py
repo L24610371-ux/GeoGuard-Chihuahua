@@ -6,19 +6,16 @@ from folium.plugins import MarkerCluster
 from datetime import datetime
 from ia_helper import inicializar_ia, obtener_respuesta_ia
 
-# CONFIGURACIÓN INICIAL
+# CONFIGURACIÓN DE PÁGINA
 st.set_page_config(page_title="GeoGuard - Chihuahua", layout="wide", page_icon="🛡️")
 
-# --- MANEJO ROBUSTO DE LA API KEY ---
+# --- MANEJO DE API KEY (Nube y Local) ---
 try:
-    # Intenta leer de los Secrets (Nube)
-    MI_API_KEY = st.secrets["AIzaSyB5KosUMhYmE6TMmPSBYTAAH1oXHDFqXpQ"]
+    MI_API_KEY = st.secrets["GOOGLE_API_KEY"]
 except:
-    # Si falla, usa la llave directa (Laptop local)
-    # REEMPLAZA ESTO CON TU LLAVE REAL PARA PROBAR EN TU PC
-    MI_API_KEY = "AIzaSyB5KosUMhYmE6TMmPSBYTAAH1oXHDFqXpQ" 
+    # Pon tu llave aquí para que funcione en tu laptop
+    MI_API_KEY = "AIzaSyBGOwmjXOohR61LlLbX-ZACsNKDsmz7Jxc" 
 
-# CARGA DE DATOS
 @st.cache_data
 def cargar_datos():
     try:
@@ -26,50 +23,44 @@ def cargar_datos():
         data.columns = data.columns.str.strip()
         return data
     except:
-        st.error("No se encontró el archivo puntos_chihuahua.csv")
         return pd.DataFrame()
 
-# SESIÓN PARA CHAT Y REPORTES
-if 'messages' not in st.session_state:
-    st.session_state.messages = []
-if 'reportes' not in st.session_state:
-    st.session_state.reportes = []
+# ESTADOS DE SESIÓN
+if 'messages' not in st.session_state: st.session_state.messages = []
+if 'reportes' not in st.session_state: st.session_state.reportes = []
 
 df = cargar_datos()
 
-# --- PANEL LATERAL (ALERTA CIUDADANA) ---
+# --- PANEL LATERAL ---
 st.sidebar.title("🕹️ Panel de Control")
 if not df.empty:
-    st.sidebar.subheader("📢 Reportar Incidente")
+    st.sidebar.subheader("📢 Reporte Comunitario")
     with st.sidebar.form("form_alerta", clear_on_submit=True):
-        tipo = st.selectbox("Tipo:", ["Persona sospechosa", "Acoso", "Calle sin luz"])
-        nota = st.text_area("Descripción:")
-        enviar = st.form_submit_button("Publicar en Mapa")
-        
+        tipo = st.selectbox("Tipo de riesgo:", ["Persona sospechosa", "Acoso", "Calle sin luz"])
+        nota = st.text_area("Detalles:")
+        enviar = st.form_submit_button("Publicar Alerta")
         if enviar and nota:
             st.session_state.reportes.append({
-                "tipo": tipo, "nota": nota, 
-                "lat": 28.633, "lon": -106.069, # Coordenadas base de Chihuahua
+                "tipo": tipo, "nota": nota, "lat": 28.633, "lon": -106.069,
                 "hora": datetime.now().strftime("%H:%M")
             })
-            st.sidebar.success("Alerta enviada a la red.")
+            st.sidebar.success("✅ Alerta compartida.")
 
 # --- CUERPO PRINCIPAL ---
 st.title("🛡️ GeoGuard: Red de Seguridad Chihuahua")
 
-# Crear Mapa
+# Mapa
 m = folium.Map(location=[28.633, -106.069], zoom_start=7, tiles="cartodbpositron")
 cluster = MarkerCluster(name="Refugios").add_to(m)
 
-# Dibujar Refugios del CSV
 for _, r in df.iterrows():
     folium.Marker(
         [r['Latitud'], r['Longitud']], 
-        popup=f"<b>{r['Nombre']}</b><br>Tel: {r['Telefono']}",
+        popup=f"<b>{r['Nombre']}</b><br>{r['Telefono']}",
         icon=folium.Icon(color="orange", icon="shield", prefix="fa")
     ).add_to(cluster)
 
-# Dibujar Alertas en tiempo real
+# Dibujar Alertas del usuario
 for rep in st.session_state.reportes:
     folium.Marker(
         [rep['lat'], rep['lon']], 
@@ -77,34 +68,45 @@ for rep in st.session_state.reportes:
         icon=folium.Icon(color="red", icon="warning", prefix="fa")
     ).add_to(m)
 
-st_folium(m, width="100%", height=450)
+st_folium(m, width="100%", height=400)
 
-# INFORMACIÓN EXTRA
-col1, col2 = st.columns(2)
-with col1:
-    with st.expander("⚖️ Marco Jurídico"):
-        st.info("Ley de Acceso a una Vida Libre de Violencia (Chihuahua).")
-with col2:
-    with st.expander("🏛️ Apoyo FICOSEC"):
-        st.info("Marca al *2232 para apoyo legal y psicológico gratuito 24/7.")
-
-# --- SECCIÓN DE CHAT IA ---
+# --- SECCIÓN DE LEYES Y FICOSEC (LO QUE ME PEDISTE) ---
 st.divider()
-st.subheader("🤖 Consultar a GeoGuard AI")
+col1, col2 = st.columns(2)
 
+with col1:
+    st.subheader("⚖️ Marco Jurídico")
+    with st.expander("Ver detalles legales"):
+        st.write("""
+        **Ley de Acceso de las Mujeres a una Vida Libre de Violencia (Chihuahua):**
+        Esta app se alinea con el Artículo 9, que establece la obligación de crear mecanismos 
+        de protección y refugios para mujeres en situación de vulnerabilidad.
+        """)
+
+with col2:
+    st.subheader("🏛️ Instituciones Aliadas")
+    with st.expander("Información de FICOSEC"):
+        st.info("**FICOSEC (Línea Ciudadana):**")
+        st.write("""
+        Puedes marcar al ** *2232 ** o al **800 999 2232**.
+        Ofrecen acompañamiento legal y psicológico gratuito las 24 horas en todo el estado de Chihuahua.
+        """)
+
+# --- CHAT CON IA ---
+st.divider()
+st.subheader("🤖 Consulta a GeoGuard AI")
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]): st.markdown(msg["content"])
 
-if prompt := st.chat_input("¿Cómo puedo ayudarte hoy?"):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"): st.markdown(prompt)
+if p := st.chat_input("¿En qué puedo ayudarte?"):
+    st.session_state.messages.append({"role": "user", "content": p})
+    with st.chat_message("user"): st.markdown(p)
     
     with st.chat_message("assistant"):
-        # Verificamos que la llave no esté vacía antes de llamar a la IA
         if MI_API_KEY and MI_API_KEY != "TU_LLAVE_AQUI":
             model, instruct = inicializar_ia('puntos_chihuahua.csv', MI_API_KEY)
-            respuesta = obtener_respuesta_ia(prompt, model, instruct)
-            st.markdown(respuesta)
-            st.session_state.messages.append({"role": "assistant", "content": respuesta})
+            r = obtener_respuesta_ia(p, model, instruct)
+            st.markdown(r)
+            st.session_state.messages.append({"role": "assistant", "content": r})
         else:
-            st.warning("Configura tu API Key para activar la IA.")
+            st.error("Configura tu API Key para activar la IA.")
