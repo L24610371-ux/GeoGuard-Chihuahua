@@ -12,9 +12,9 @@ st.set_page_config(page_title="GeoGuard - Chihuahua", layout="wide", page_icon="
 
 # --- CONEXIÓN CON LA API (USANDO SECRETS) ---
 try:
-    MI_API_KEY = st.secrets["GOOGLE_API_KEY"]
+    MI_API_KEY = st.secrets["AIzaSyB5KosUMhYmE6TMmPSBYTAAH1oXHDFqXpQ"]
 except:
-    MI_API_KEY = "TU_LLAVE_LOCAL_POR_SI_FALLA"
+    MI_API_KEY = "AIzaSyB5KosUMhYmE6TMmPSBYTAAH1oXHDFqXpQ"
 
 # FUNCIONES MATEMÁTICAS
 def calcular_distancia(lat1, lon1, lat2, lon2):
