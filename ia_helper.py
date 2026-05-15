@@ -1,35 +1,39 @@
-import google.generativeai as genai
+from google import genai
 import pandas as pd
 
 def inicializar_ia(csv_path, api_key):
-    genai.configure(api_key=api_key)
+    """Configura el cliente de IA con el contexto de Chihuahua."""
+    # Inicializamos el cliente con la nueva librería google-genai
+    client = genai.Client(api_key=api_key)
     
     try:
         df = pd.read_csv(csv_path)
         df.columns = df.columns.str.strip()
         contexto_refugios = df.to_string(index=False)
     except:
-        contexto_refugios = "No se pudieron cargar los datos de refugios."
+        contexto_refugios = "Información de refugios en Chihuahua disponible localmente."
 
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    
     instrucciones = f"""
-    Eres 'GeoGuard AI', asistente experta en seguridad ciudadana en Chihuahua.
-    Tu objetivo es ayudar a mujeres en riesgo usando estos datos de refugios:
-    {contexto_refugios}
+    Eres 'GeoGuard AI', asistente experta en seguridad para mujeres en Chihuahua.
+    Datos de refugios: {contexto_refugios}
     
-    REGLAS:
-    1. Si la usuaria está en peligro, indica el Punto Naranja más cercano con dirección y teléfono.
+    REGLAS DE ORO:
+    1. Si hay riesgo, indica el Punto Naranja o refugio más cercano con su dirección.
     2. Menciona a FICOSEC (*2232) para asesoría legal y psicológica gratuita.
-    3. Si la ciudad no está en el mapa, recomienda llamar al 911.
-    4. Sé empática, directa y profesional.
+    3. Si la ciudad no está en la lista, recomienda llamar al 911 de inmediato.
+    4. Usa un tono protector, profesional y empático.
     """
-    return model, instrucciones
+    return client, instrucciones
 
-def obtener_respuesta_ia(mensaje_usuario, model, instrucciones):
+def obtener_respuesta_ia(mensaje_usuario, client, instrucciones):
+    """Genera respuesta usando el modelo gemini-1.5-flash."""
     try:
-        prompt = f"{instrucciones}\n\nPregunta de la usuaria: {mensaje_usuario}"
-        response = model.generate_content(prompt)
+        # Llamada al modelo con el nuevo formato
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=f"{instrucciones}\n\nPregunta de la usuaria: {mensaje_usuario}"
+        )
         return response.text
-    except:
-        return "Lo siento, tuve un problema de conexión. Por favor, intenta de nuevo o llama al 911."
+    except Exception as e:
+        # Este mensaje saldrá si no hay internet o la llave falló
+        return "⚠️ Tuve un problema de conexión con Google. Revisa tu Wi-Fi o intenta de nuevo."
