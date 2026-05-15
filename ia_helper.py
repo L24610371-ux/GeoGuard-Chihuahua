@@ -3,7 +3,6 @@ import pandas as pd
 
 def inicializar_ia(csv_path, api_key):
     """Configura el cliente de IA con el contexto de Chihuahua."""
-    # Inicializamos el cliente con la nueva librería google-genai
     client = genai.Client(api_key=api_key)
     
     try:
@@ -28,12 +27,10 @@ def inicializar_ia(csv_path, api_key):
 def obtener_respuesta_ia(mensaje_usuario, client, instrucciones):
     """Genera respuesta usando el modelo gemini-1.5-flash."""
     try:
-        # Llamada al modelo con el nuevo formato
         response = client.models.generate_content(
             model="gemini-1.5-flash",
             contents=f"{instrucciones}\n\nPregunta de la usuaria: {mensaje_usuario}"
         )
         return response.text
     except Exception as e:
-        # Este mensaje saldrá si no hay internet o la llave falló
         return "⚠️ Tuve un problema de conexión con Google. Revisa tu Wi-Fi o intenta de nuevo."
